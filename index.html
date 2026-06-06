@@ -31,7 +31,6 @@
 <script>
 const ENV_ID = 'webtest-d1g5ir6tl69366b35';
 const COLLECTION = 'webtest_data';
-const DOC_ID = 'singleton';
 const CACHE_KEY = 'webtest_data_cache';
 const container = document.getElementById('content');
 let db = null;
@@ -71,8 +70,7 @@ async function loadContent() {
 
   try {
     if (!db) await initCloudBase();
-    let res;
-    try { res = await db.collection(COLLECTION).doc(DOC_ID).get(); } catch (e) { res = { data: [] }; }
+    const res = await db.collection(COLLECTION).where({published: true}).orderBy('updatedAt', 'desc').limit(1).get();
     const latest = res.data && res.data.length > 0 ? res.data[0] : null;
     if (latest) {
       latest._v = 1;

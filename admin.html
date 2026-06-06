@@ -60,8 +60,7 @@
 <script>
 const ENV_ID = 'webtest-d1g5ir6tl69366b35';
 const COLLECTION = 'webtest_data';
-const DOC_ID = 'singleton';
-let blocks = [], isPublishing = false, db = null;
+let blocks = [], isPublishing = false, db = null, currentDocId = null;
 
 function showStatus(msg, type) { const b = document.getElementById('statusBar'); b.textContent = msg; b.className = 'status-bar show ' + type; if (type === 'success' || type === 'error') setTimeout(() => { b.className = 'status-bar'; }, 4000); }
 function showToast(msg, type) { const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2500); }
@@ -117,13 +116,16 @@ async function loadData() {
   showStatus('正在加载...', 'info');
   try {
     if (!db) await initCloudBase();
-    let res;
-    try { res = await db.collection(COLLECTION).doc(DOC_ID).get(); } catch (e) { res = { data: [] }; }
+    // 查询所有已发布文档，取最新一条
+    const res = await db.collection(COLLECTION).where({published: true}).orderBy('updatedAt', 'desc').limit(1).get();
     if (res.data && res.data.length > 0) {
+      currentDocId = res.data[0]._id;
       blocks = res.data[0].blocks || [];
     } else {
+      // 数据库为空，自动创建
       const initData = { published: true, updatedAt: new Date().toISOString(), blocks: [{ id: 'w1', type: 'text', content: '👋 欢迎！在后台编辑内容，点击发布后刷新即可看到更新。' }, { id: 'i1', type: 'image', src: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800', alt: '示例图片' }] };
-      await db.collection(COLLECTION).add({ _id: DOC_ID, ...initData });
+      const addRes = await db.collection(COLLECTION).add(initData);
+      currentDocId = addRes.id || addRes._id;
       blocks = initData.blocks;
     }
     document.getElementById('statusBar').className = 'status-bar';
@@ -141,9 +143,14 @@ async function publish() {
   try {
     if (!db) await initCloudBase();
     const data = { published: true, updatedAt: new Date().toISOString(), blocks: blocks };
-    // 先删后建，兼容所有 SDK 版本
-    try { await db.collection(COLLECTION).doc(DOC_ID).remove(); } catch (e) {}
-    await db.collection(COLLECTION).add({ _id: DOC_ID, ...data });
+    if (currentDocId) {
+      // 更新已有文档
+      await db.collection(COLLECTION).doc(currentDocId).update(data);
+    } else {
+      // 首次创建
+      const addRes = await db.collection(COLLECTION).add(data);
+      currentDocId = addRes.id || addRes._id;
+    }
     showStatus('✅ 发布成功！刷新前端即可看到更新。', 'success');
     showToast('发布成功！', 'success');
   } catch (err) { showStatus('发布失败：'+(err.message||err.code||'未知'), 'error'); showToast('发布失败', 'error'); }
