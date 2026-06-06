@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>内容编辑 - 后台</title>
+<script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
+<style>
+  :root { --bg: #f0f2f5; --card-bg: #fff; --text: #1a1a1a; --text-secondary: #888; --border: #e0e0e0; --radius: 10px; --primary: #3b82f6; --primary-hover: #2563eb; --danger: #ef4444; --success: #22c55e; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .toolbar { background: var(--card-bg); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; position: sticky; top: 0; z-index: 100; }
+  .toolbar .brand { font-weight: 700; font-size: 1.05rem; }
+  .toolbar .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn { padding: 9px 18px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: .9rem; font-weight: 500; background: var(--card-bg); color: var(--text); transition: all .15s; white-space: nowrap; }
+  .btn:hover { background: #f8f8f8; }
+  .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-danger { color: var(--danger); border-color: var(--danger); }
+  .btn-danger:hover { background: #fef2f2; }
+  .btn-success { background: var(--success); color: #fff; border-color: var(--success); }
+  .btn-sm { padding: 5px 10px; font-size: .8rem; border-radius: 6px; }
+  .container { max-width: 760px; margin: 0 auto; padding: 24px 20px 80px; }
+  .status-bar { text-align: center; padding: 10px; border-radius: var(--radius); margin-bottom: 20px; font-size: .88rem; display: none; }
+  .status-bar.show { display: block; }
+  .status-bar.info { background: #eff6ff; color: #1d4ed8; }
+  .status-bar.success { background: #f0fdf4; color: #15803d; }
+  .status-bar.error { background: #fef2f2; color: #dc2626; }
+  .block-card { background: var(--card-bg); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.05); border: 1px solid var(--border); }
+  .block-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
+  .badge-text { background: #eef2ff; color: #4f46e5; font-size: .75rem; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+  .badge-image { background: #fef3c7; color: #b45309; font-size: .75rem; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+  .block-controls { display: flex; gap: 4px; }
+  textarea, input[type="text"], input[type="url"] { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: .95rem; font-family: inherit; resize: vertical; background: #fafafa; }
+  textarea:focus, input:focus { outline: none; border-color: var(--primary); background: #fff; }
+  textarea { min-height: 100px; }
+  .form-group { margin-bottom: 10px; }
+  .form-group label { display: block; font-size: .8rem; color: var(--text-secondary); margin-bottom: 4px; font-weight: 500; }
+  .img-preview { max-width: 100%; max-height: 200px; border-radius: 8px; margin-top: 8px; display: none; }
+  .img-preview.show { display: block; }
+  .empty { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+  .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); padding: 12px 28px; border-radius: 10px; color: #fff; font-weight: 500; font-size: .92rem; z-index: 200; animation: fadeUp .3s ease; }
+  .toast.success { background: #22c55e; }
+  .toast.error { background: #ef4444; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+  @media (max-width: 768px) { .container { padding: 16px 12px 80px; } .toolbar { padding: 10px 14px; } .btn { padding: 7px 13px; font-size: .82rem; } .block-card { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span class="brand">📝 内容编辑</span>
+  <div class="actions">
+    <button class="btn" onclick="addTextBlock()">＋ 文字区块</button>
+    <button class="btn" onclick="addImageBlock()">🖼 图片区块</button>
+    <button class="btn btn-success" onclick="publish()" id="publishBtn">✅ 发布</button>
+  </div>
+</div>
+<div class="status-bar" id="statusBar"></div>
+<div class="container" id="blockList"></div>
+<script>
+const ENV_ID = 'webtest-d1g5ir6tl69366b35';
+const COLLECTION = 'webtest_data';
+const DOC_ID = 'singleton';
+let blocks = [], isPublishing = false, db = null;
+
+function showStatus(msg, type) { const b = document.getElementById('statusBar'); b.textContent = msg; b.className = 'status-bar show ' + type; if (type === 'success' || type === 'error') setTimeout(() => { b.className = 'status-bar'; }, 4000); }
+function showToast(msg, type) { const t = document.createElement('div'); t.className = 'toast ' + type; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2500); }
+function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function generateId() { return 'b' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
+
+function render() {
+  const list = document.getElementById('blockList');
+  if (blocks.length === 0) { list.innerHTML = '<div class="empty"><p>📭 还没有内容区块</p><p style="margin-top:8px;color:#aaa;">点击上方按钮添加</p></div>'; return; }
+  list.innerHTML = blocks.map((block, index) => {
+    const isText = block.type === 'text';
+    const badgeClass = isText ? 'badge-text' : 'badge-image';
+    const typeLabel = isText ? '文字' : '图片';
+    const isDataUrl = block.src && block.src.startsWith('data:');
+    let editFields = '';
+    if (isText) {
+      editFields = '<div class="form-group"><label>文字内容</label><textarea onchange="updateBlock(\''+block.id+'\',\'content\',this.value)">'+escapeHtml(block.content||'')+'</textarea></div>';
+    } else {
+      editFields = '<div class="form-group"><label>图片链接 (URL)</label><input type="text" value="'+escapeHtml(isDataUrl?'[本地上传的图片]':(block.src||''))+'" onchange="updateBlock(\''+block.id+'\',\'src\',this.value);previewImage(\''+block.id+'\',this.value)" placeholder="输入图片 URL"></div>'
+        + '<div class="form-group"><label>或从本地上传</label><input type="file" accept="image/*" onchange="handleFileUpload(\''+block.id+'\',this)" style="font-size:.85rem"><span style="font-size:.75rem;color:#999;display:block;margin-top:4px">支持 JPG/PNG/GIF/WebP，建议小于 5MB</span></div>'
+        + '<div class="form-group"><label>图片描述</label><input type="text" value="'+escapeHtml(block.alt||'')+'" onchange="updateBlock(\''+block.id+'\',\'alt\',this.value)" placeholder="图片说明"></div>'
+        + '<img class="img-preview '+(block.src?'show':'')+'" id="preview-'+block.id+'" src="'+escapeHtml(block.src||'')+'" alt="预览">';
+    }
+    return '<div class="block-card"><div class="block-header"><span class="'+badgeClass+'">'+typeLabel+' #'+(index+1)+'</span><div class="block-controls"><button class="btn btn-sm" onclick="moveBlock(\''+block.id+'\',-1)"'+(index===0?' disabled':'')+'>↑</button><button class="btn btn-sm" onclick="moveBlock(\''+block.id+'\',1)"'+(index===blocks.length-1?' disabled':'')+'>↓</button><button class="btn btn-sm btn-danger" onclick="deleteBlock(\''+block.id+'\')">✕</button></div></div>'+editFields+'</div>';
+  }).join('');
+}
+
+function updateBlock(id, field, value) { const b = blocks.find(b => b.id === id); if (b) b[field] = value; }
+function previewImage(id, src) { const img = document.getElementById('preview-'+id); if (img) { img.src = src; img.className = 'img-preview ' + (src?'show':''); } }
+function addTextBlock() { blocks.push({ id: generateId(), type: 'text', content: '' }); render(); showToast('已添加文字区块', 'success'); }
+function addImageBlock() { blocks.push({ id: generateId(), type: 'image', src: '', alt: '' }); render(); showToast('已添加图片区块', 'success'); }
+function deleteBlock(id) { if (!confirm('确定删除？')) return; blocks = blocks.filter(b => b.id !== id); render(); showToast('已删除', 'success'); }
+function moveBlock(id, dir) { const i = blocks.findIndex(b => b.id === id); if (i < 0) return; const ni = i + dir; if (ni < 0 || ni >= blocks.length) return; [blocks[i], blocks[ni]] = [blocks[ni], blocks[i]]; render(); }
+
+function handleFileUpload(blockId, fileInput) {
+  const file = fileInput.files[0]; if (!file) return;
+  if (file.size > 5*1024*1024) { showToast('图片过大，请小于 5MB', 'error'); fileInput.value = ''; return; }
+  if (!file.type.startsWith('image/')) { showToast('请选择图片文件', 'error'); fileInput.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = function(e) { updateBlock(blockId, 'src', e.target.result); previewImage(blockId, e.target.result); render(); showToast('图片已加载', 'success'); };
+  reader.onerror = function() { showToast('读取失败', 'error'); };
+  reader.readAsDataURL(file);
+}
+
+async function initCloudBase() {
+  const app = cloudbase.init({ env: ENV_ID });
+  const auth = app.auth({ persistence: 'local' });
+  await auth.anonymousAuthProvider().signIn();
+  db = app.database();
+}
+
+async function loadData() {
+  showStatus('正在加载...', 'info');
+  try {
+    if (!db) await initCloudBase();
+    let res;
+    try { res = await db.collection(COLLECTION).doc(DOC_ID).get(); } catch (e) { res = { data: [] }; }
+    if (res.data && res.data.length > 0) {
+      blocks = res.data[0].blocks || [];
+    } else {
+      const initData = { published: true, updatedAt: new Date().toISOString(), blocks: [{ id: 'w1', type: 'text', content: '👋 欢迎！在后台编辑内容，点击发布后刷新即可看到更新。' }, { id: 'i1', type: 'image', src: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800', alt: '示例图片' }] };
+      await db.collection(COLLECTION).doc(DOC_ID).set(initData);
+      blocks = initData.blocks;
+    }
+    document.getElementById('statusBar').className = 'status-bar';
+    render();
+  } catch (err) { showStatus('加载失败：'+(err.message||err.code||'未知'), 'error'); blocks = []; render(); }
+}
+
+async function publish() {
+  if (isPublishing) return;
+  if (!confirm('确定发布？')) return;
+  isPublishing = true;
+  const btn = document.getElementById('publishBtn');
+  btn.textContent = '⏳ 发布中...'; btn.disabled = true;
+  showStatus('正在发布...', 'info');
+  try {
+    if (!db) await initCloudBase();
+    await db.collection(COLLECTION).doc(DOC_ID).set({ published: true, updatedAt: new Date().toISOString(), blocks: blocks });
+    showStatus('✅ 发布成功！刷新前端即可看到更新。', 'success');
+    showToast('发布成功！', 'success');
+  } catch (err) { showStatus('发布失败：'+(err.message||err.code||'未知'), 'error'); showToast('发布失败', 'error'); }
+  finally { isPublishing = false; btn.textContent = '✅ 发布'; btn.disabled = false; }
+}
+
+loadData();
+</script>
+</body>
+</html>

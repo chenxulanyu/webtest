@@ -1,0 +1,8 @@
+{
+  "published": true,
+  "updatedAt": "2026-06-06T12:00:00Z",
+  "blocks": [
+    { "id": "w1", "type": "text", "content": "👋 欢迎！\n\n在后台编辑内容，点击发布后刷新即可看到更新。" },
+    { "id": "i1", "type": "image", "src": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800", "alt": "示例图片" }
+  ]
+}
