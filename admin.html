@@ -140,7 +140,14 @@ async function publish() {
   showStatus('正在发布...', 'info');
   try {
     if (!db) await initCloudBase();
-    await db.collection(COLLECTION).doc(DOC_ID).set({ published: true, updatedAt: new Date().toISOString(), blocks: blocks });
+    const data = { published: true, updatedAt: new Date().toISOString(), blocks: blocks };
+    // update 替代 set，避免 duplicate key 错误
+    try {
+      await db.collection(COLLECTION).doc(DOC_ID).update(data);
+    } catch (e) {
+      // 文档不存在时回退到 set
+      await db.collection(COLLECTION).doc(DOC_ID).set(data);
+    }
     showStatus('✅ 发布成功！刷新前端即可看到更新。', 'success');
     showToast('发布成功！', 'success');
   } catch (err) { showStatus('发布失败：'+(err.message||err.code||'未知'), 'error'); showToast('发布失败', 'error'); }
