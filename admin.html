@@ -123,7 +123,7 @@ async function loadData() {
       blocks = res.data[0].blocks || [];
     } else {
       const initData = { published: true, updatedAt: new Date().toISOString(), blocks: [{ id: 'w1', type: 'text', content: '👋 欢迎！在后台编辑内容，点击发布后刷新即可看到更新。' }, { id: 'i1', type: 'image', src: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800', alt: '示例图片' }] };
-      await db.collection(COLLECTION).doc(DOC_ID).set(initData);
+      await db.collection(COLLECTION).add({ _id: DOC_ID, ...initData });
       blocks = initData.blocks;
     }
     document.getElementById('statusBar').className = 'status-bar';
@@ -141,13 +141,9 @@ async function publish() {
   try {
     if (!db) await initCloudBase();
     const data = { published: true, updatedAt: new Date().toISOString(), blocks: blocks };
-    // update 替代 set，避免 duplicate key 错误
-    try {
-      await db.collection(COLLECTION).doc(DOC_ID).update(data);
-    } catch (e) {
-      // 文档不存在时回退到 set
-      await db.collection(COLLECTION).doc(DOC_ID).set(data);
-    }
+    // 先删后建，兼容所有 SDK 版本
+    try { await db.collection(COLLECTION).doc(DOC_ID).remove(); } catch (e) {}
+    await db.collection(COLLECTION).add({ _id: DOC_ID, ...data });
     showStatus('✅ 发布成功！刷新前端即可看到更新。', 'success');
     showToast('发布成功！', 'success');
   } catch (err) { showStatus('发布失败：'+(err.message||err.code||'未知'), 'error'); showToast('发布失败', 'error'); }
